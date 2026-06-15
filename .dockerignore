@@ -1,0 +1,16 @@
+.git/
+.gitignore
+.github/
+*.out
+*.test
+*.exe
+.DS_Store
+vendor/
+dist/
+tmp/
+bin/
+README.md
+AGENTS.md
+.air.toml
+.golangci.yml
+mise.toml
