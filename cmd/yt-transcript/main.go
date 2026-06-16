@@ -12,15 +12,28 @@ import (
 	yt "github.com/shanehull/yt-transcript"
 )
 
+var version = "dev"
+
 func main() {
-	lang := flag.String("lang", "en", "language code for transcript")
-	format := flag.String("fmt", "text", "output format: text, json, srt")
+	var showVersion bool
+	var lang, format string
+	flag.BoolVar(&showVersion, "version", false, "print version and exit")
+	flag.BoolVar(&showVersion, "v", false, "print version and exit (shorthand)")
+	flag.StringVar(&lang, "lang", "en", "language code for transcript")
+	flag.StringVar(&lang, "l", "en", "language code for transcript (shorthand)")
+	flag.StringVar(&format, "fmt", "text", "output format: text, json, srt")
+	flag.StringVar(&format, "f", "text", "output format: text, json, srt (shorthand)")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [flags] <video_id>\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Example: %s -lang en dQw4w9WgXcQ\n\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if showVersion {
+		fmt.Println("yt-transcript", version)
+		return
+	}
 
 	if flag.NArg() < 1 {
 		flag.Usage()
@@ -30,13 +43,13 @@ func main() {
 	videoID := flag.Arg(0)
 
 	client := yt.NewClient()
-	segments, err := client.FetchTranscript(context.Background(), videoID, *lang)
+	segments, err := client.FetchTranscript(context.Background(), videoID, lang)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	switch *format {
+	switch format {
 	case "json":
 		outputJSON(segments)
 	case "srt":
@@ -44,7 +57,7 @@ func main() {
 	case "text":
 		outputText(segments)
 	default:
-		fmt.Fprintf(os.Stderr, "Error: unknown format %q (use text, json, or srt)\n", *format)
+		fmt.Fprintf(os.Stderr, "Error: unknown format %q (use text, json, or srt)\n", format)
 		os.Exit(1)
 	}
 }
