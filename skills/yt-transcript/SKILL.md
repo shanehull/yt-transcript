@@ -8,7 +8,7 @@ allowed-tools: bash
 # yt-transcript
 
 ```
-GET https://yt-transcript.shanehull.com/{video_id}[?lang=en][&fmt=text|json|srt]
+GET https://yt-transcript.net/{video_id}[?lang=en][&fmt=text|json|srt]
 ```
 
 Defaults to English, JSON output.
