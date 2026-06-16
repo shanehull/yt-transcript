@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3](https://github.com/shanehull/yt-transcript/compare/v0.0.2...v0.0.3) (2026-06-16)
+
+
+### Bug Fixes
+
+* reject non-YT video IDs before hitting upstream API ([#4](https://github.com/shanehull/yt-transcript/issues/4)) ([efef2ab](https://github.com/shanehull/yt-transcript/commit/efef2abe5d71726650c7ab0965eb4de4614987dd))
+
 ## [0.0.2](https://github.com/shanehull/yt-transcript/compare/v0.0.1...v0.0.2) (2026-06-16)
 
 
