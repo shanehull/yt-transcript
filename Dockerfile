@@ -10,5 +10,6 @@ FROM scratch
 COPY --from=builder /app/yt-transcript-server /usr/local/bin/yt-transcript-server
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 ENV PORT=8080
+ENV SERVER_HOST=0.0.0.0
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/yt-transcript-server"]
