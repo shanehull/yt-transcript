@@ -61,3 +61,15 @@ func TestNotFound(t *testing.T) {
 		t.Fatalf("got status %d, want 404", rec.Code)
 	}
 }
+
+func TestInvalidVideoID(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/favicon.png", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("got status %d, want 400", rec.Code)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 
 	yt "github.com/shanehull/yt-transcript"
@@ -132,6 +133,8 @@ type pageData struct {
 	Version string
 }
 
+var videoIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+
 var indexPage = template.Must(template.New("index").Parse(indexHTML))
 
 // Healthz returns a 200 OK status for health checks.
@@ -160,8 +163,8 @@ func Index(baseURL, version string) http.Handler {
 func Transcript(client *yt.Client, transcriptCache *cache.Cache) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		videoID := r.PathValue("video_id")
-		if videoID == "" {
-			writeError(w, http.StatusBadRequest, "missing video_id")
+		if videoID == "" || !videoIDRe.MatchString(videoID) {
+			writeError(w, http.StatusBadRequest, "invalid video_id")
 			return
 		}
 
