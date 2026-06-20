@@ -243,7 +243,8 @@ func errorStatus(err error) int {
 		return http.StatusServiceUnavailable
 	case strings.Contains(msg, "could not parse YouTube page"):
 		return http.StatusBadGateway
-	case strings.Contains(msg, "no transcript found"):
+	case strings.Contains(msg, "no caption tracks"),
+		strings.Contains(msg, "no transcript found"):
 		return http.StatusNotFound
 	default:
 		return http.StatusBadGateway
