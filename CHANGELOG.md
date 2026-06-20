@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.4](https://github.com/shanehull/yt-transcript/compare/v0.0.3...v0.0.4) (2026-06-20)
+
+
+### Bug Fixes
+
+* return 404 instead of 502 when video has no caption tracks ([#6](https://github.com/shanehull/yt-transcript/issues/6)) ([bc62051](https://github.com/shanehull/yt-transcript/commit/bc620514668ad534e784adf56cc7948a58762f96))
+
 ## [0.0.3](https://github.com/shanehull/yt-transcript/compare/v0.0.2...v0.0.3) (2026-06-16)
 
 
