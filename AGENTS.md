@@ -8,12 +8,14 @@ Tool versions pinned in `mise.toml`.
 
 ```
 transcript.go              Client, NewClient, FetchTranscript, WithHTTPClient
+clients.go                 Innertube client identities (rotating)
+breaker.go                 Circuit breaker for upstream 429s
 internal/cache/cache.go    In-memory TTL cache for server use
 cmd/yt-transcript/main.go  CLI (text, json, srt output)
 cmd/server/main.go         HTTP server (/{video_id}, /healthz)
 ```
 
-Fetch flow: watch page → extract API key from HTML → innertube player API (ANDROID client) → caption track baseUrl → parse XML → segments.
+Fetch flow: watch page → extract API key from HTML → innertube player API (rotating app clients) → caption track baseUrl → parse XML → segments.
 
 ## Server
 
@@ -31,6 +33,7 @@ Error status codes: 400 (bad request), 404 (no transcript), 502 (upstream failur
 - **HTML entities** in transcript text (`&#39;`, `&amp;`, etc.) are unescaped.
 - **No API key needed** — extracted from the watch page at runtime.
 - **429 / bot detection** detected in all three HTTP calls; returned as clear errors.
+- **Client rotation**: `clients.go` holds verified app identities (Android, iOS, Android VR, visionOS), tried in turn so a stale client is not fatal. The web/`WEB` client is deliberately absent — it is poToken-gated and returns `UNPLAYABLE`. `TestLive_FetchEachClient` flags identity rot.
 - **Rate-limit backoff**: a circuit breaker trips after repeated 429s and backs off (1m doubling to a 1h cap), short-circuiting upstream calls so a flagged egress is not hammered. Seeing 429s everywhere usually means the egress IP is banned on `timedtext`, not a code fault.
 
 ## Tests

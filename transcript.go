@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,7 +23,6 @@ const (
 	watchURL  = "https://www.youtube.com/watch?v=%s"
 	playerURL = "https://www.youtube.com/youtubei/v1/player?key=%s"
 	apiKeyRe  = `"INNERTUBE_API_KEY":\s*"([a-zA-Z0-9_-]+)"`
-	androidUA = "com.google.android.youtube/20.10.38 (Linux; U; Android 13) gzip"
 )
 
 // Segment represents a single transcript line with timing.
@@ -47,16 +48,19 @@ func (e *RateLimitError) Error() string {
 
 // Client fetches YouTube transcripts.
 type Client struct {
-	http    *http.Client
-	breaker *breaker
+	http       *http.Client
+	breaker    *breaker
+	identities []clientIdentity
+	rotation   atomic.Uint64
 }
 
 // NewClient returns a Client with a default 30s timeout and cookie jar.
 func NewClient() *Client {
 	jar, _ := cookiejar.New(nil)
 	return &Client{
-		http:    &http.Client{Timeout: 30 * time.Second, Jar: jar},
-		breaker: newBreaker(3, time.Minute, time.Hour),
+		http:       &http.Client{Timeout: 30 * time.Second, Jar: jar},
+		breaker:    newBreaker(3, time.Minute, time.Hour),
+		identities: clientIdentities,
 	}
 }
 
@@ -107,7 +111,9 @@ func parseRetryAfter(v string) time.Duration {
 	return 0
 }
 
-// FetchTranscript retrieves the transcript for a YouTube video in the given language.
+// FetchTranscript retrieves the transcript for a YouTube video in the given
+// language. It rotates over the known client identities and falls through to
+// the next when one fails, so a stale client is not fatal.
 func (c *Client) FetchTranscript(ctx context.Context, videoID, lang string) ([]Segment, error) {
 	html, err := c.fetchWatchPage(ctx, videoID)
 	if err != nil {
@@ -119,17 +125,39 @@ func (c *Client) FetchTranscript(ctx context.Context, videoID, lang string) ([]S
 		return nil, fmt.Errorf("YouTube did not return expected page content — the video may be unavailable or requests are being blocked: %w", err)
 	}
 
-	captions, err := c.fetchCaptions(ctx, videoID, apiKey)
+	n := len(c.identities)
+	start := int(c.rotation.Add(1)-1) % n
+	var lastErr error
+	for i := 0; i < n; i++ {
+		id := c.identities[(start+i)%n]
+		segments, err := c.fetchWithClient(ctx, videoID, lang, apiKey, id)
+		if err == nil {
+			return segments, nil
+		}
+		var rateLimited *RateLimitError
+		if errors.As(err, &rateLimited) {
+			return nil, err
+		}
+		if strings.Contains(err.Error(), "no transcript found") {
+			return nil, err
+		}
+		lastErr = err
+	}
+	return nil, fmt.Errorf("all clients failed: %w", lastErr)
+}
+
+func (c *Client) fetchWithClient(ctx context.Context, videoID, lang, apiKey string, id clientIdentity) ([]Segment, error) {
+	captions, err := c.fetchCaptions(ctx, videoID, apiKey, id)
 	if err != nil {
-		return nil, fmt.Errorf("fetching captions: %w", err)
+		return nil, fmt.Errorf("fetching captions with %s: %w", id.name, err)
 	}
 
-	transcript, err := findCaptionTrack(captions, lang)
+	track, err := findCaptionTrack(captions, lang)
 	if err != nil {
-		return nil, fmt.Errorf("finding transcript: %w", err)
+		return nil, err
 	}
 
-	return c.fetchAndParse(ctx, transcript.BaseURL)
+	return c.fetchAndParse(ctx, track.BaseURL, id)
 }
 
 func (c *Client) fetchWatchPage(ctx context.Context, videoID string) (string, error) {
@@ -180,13 +208,10 @@ type captionTrack struct {
 	} `json:"name"`
 }
 
-func (c *Client) fetchCaptions(ctx context.Context, videoID, apiKey string) ([]captionTrack, error) {
+func (c *Client) fetchCaptions(ctx context.Context, videoID, apiKey string, id clientIdentity) ([]captionTrack, error) {
 	body, err := json.Marshal(map[string]any{
 		"context": map[string]any{
-			"client": map[string]string{
-				"clientName":    "ANDROID",
-				"clientVersion": "20.10.38",
-			},
+			"client": id.context(),
 		},
 		"videoId": videoID,
 	})
@@ -200,7 +225,7 @@ func (c *Client) fetchCaptions(ctx context.Context, videoID, apiKey string) ([]c
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", androidUA)
+	req.Header.Set("User-Agent", id.userAgent)
 
 	resp, err := c.do(req)
 	if err != nil {
@@ -252,10 +277,13 @@ type transcriptText struct {
 	Value string  `xml:",chardata"`
 }
 
-func (c *Client) fetchAndParse(ctx context.Context, baseURL string) ([]Segment, error) {
+func (c *Client) fetchAndParse(ctx context.Context, baseURL string, id clientIdentity) ([]Segment, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL, nil)
 	if err != nil {
 		return nil, err
+	}
+	if id.userAgent != "" {
+		req.Header.Set("User-Agent", id.userAgent)
 	}
 
 	resp, err := c.do(req)
