@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -30,16 +31,32 @@ type Segment struct {
 	Duration float64 `json:"duration"`
 }
 
+// RateLimitError reports that YouTube is throttling or blocking requests from
+// this client. RetryAfter is the suggested wait before trying again; zero means
+// retry immediately.
+type RateLimitError struct {
+	RetryAfter time.Duration
+}
+
+func (e *RateLimitError) Error() string {
+	if e.RetryAfter > 0 {
+		return fmt.Sprintf("rate limited by YouTube (429), retry after %s", e.RetryAfter.Round(time.Second))
+	}
+	return "rate limited by YouTube (429)"
+}
+
 // Client fetches YouTube transcripts.
 type Client struct {
-	http *http.Client
+	http    *http.Client
+	breaker *breaker
 }
 
 // NewClient returns a Client with a default 30s timeout and cookie jar.
 func NewClient() *Client {
 	jar, _ := cookiejar.New(nil)
 	return &Client{
-		http: &http.Client{Timeout: 30 * time.Second, Jar: jar},
+		http:    &http.Client{Timeout: 30 * time.Second, Jar: jar},
+		breaker: newBreaker(3, time.Minute, time.Hour),
 	}
 }
 
@@ -47,6 +64,47 @@ func NewClient() *Client {
 func (c *Client) WithHTTPClient(h *http.Client) *Client {
 	c.http = h
 	return c
+}
+
+// do performs an upstream request, short-circuiting while the breaker is open.
+// A 429 trips the breaker and is surfaced as a *RateLimitError.
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	if remaining, ok := c.breaker.allow(time.Now()); !ok {
+		return nil, &RateLimitError{RetryAfter: remaining}
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+		_ = resp.Body.Close()
+		cooldown := c.breaker.fail(retryAfter, time.Now())
+		if cooldown > 0 {
+			return nil, &RateLimitError{RetryAfter: cooldown}
+		}
+		return nil, &RateLimitError{RetryAfter: retryAfter}
+	}
+
+	c.breaker.succeed()
+	return resp, nil
+}
+
+func parseRetryAfter(v string) time.Duration {
+	if v == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(v); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 // FetchTranscript retrieves the transcript for a YouTube video in the given language.
@@ -82,15 +140,11 @@ func (c *Client) fetchWatchPage(ctx context.Context, videoID string) (string, er
 	}
 	req.Header.Set("Accept-Language", "en-US")
 
-	resp, err := c.http.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return "", fmt.Errorf("rate limited by YouTube (429)")
-	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -148,15 +202,11 @@ func (c *Client) fetchCaptions(ctx context.Context, videoID, apiKey string) ([]c
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", androidUA)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("rate limited by YouTube (429)")
-	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -208,15 +258,11 @@ func (c *Client) fetchAndParse(ctx context.Context, baseURL string) ([]Segment, 
 		return nil, err
 	}
 
-	resp, err := c.http.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("rate limited by YouTube (429)")
-	}
 
 	var x transcriptXML
 	if err := xml.NewDecoder(resp.Body).Decode(&x); err != nil {
