@@ -2,8 +2,64 @@ package yt_transcript
 
 import (
 	"context"
+	"reflect"
 	"testing"
 )
+
+func langTrack(code, kind, name string) captionTrack {
+	t := captionTrack{LanguageCode: code, Kind: kind}
+	if name != "" {
+		t.Name.Runs = append(t.Name.Runs, struct {
+			Text string `json:"text"`
+		}{Text: name})
+	}
+	return t
+}
+
+func TestToLanguages(t *testing.T) {
+	got := toLanguages([]captionTrack{
+		langTrack("en", "asr", "English (auto-generated)"),
+		langTrack("en", "", "English"),
+		langTrack("de", "", "German"),
+		langTrack("fr", "", ""),
+	})
+	want := []TranscriptLanguage{
+		{Code: "en", Name: "English"},
+		{Code: "de", Name: "German"},
+		{Code: "fr", Name: "fr"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("toLanguages = %+v, want %+v", got, want)
+	}
+}
+
+func TestLive_ListLanguages(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live test in short mode")
+	}
+	langs, err := NewClient().ListLanguages(context.Background(), "dQw4w9WgXcQ")
+	if err != nil {
+		t.Fatalf("ListLanguages: %v", err)
+	}
+	if len(langs) == 0 {
+		t.Fatal("expected at least one language")
+	}
+	var found bool
+	for _, l := range langs {
+		if l.Code == "" {
+			t.Error("empty language code")
+		}
+		if l.Name == "" {
+			t.Errorf("%s: empty language name", l.Code)
+		}
+		if l.Code == "en" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected English in the language list")
+	}
+}
 
 func TestLive_FetchTranscript(t *testing.T) {
 	if testing.Short() {

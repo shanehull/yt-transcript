@@ -160,6 +160,79 @@ func (c *Client) fetchWithClient(ctx context.Context, videoID, lang, apiKey stri
 	return c.fetchAndParse(ctx, track.BaseURL, id)
 }
 
+// TranscriptLanguage is an available caption track: its language code and
+// human-readable name.
+type TranscriptLanguage struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// ListLanguages returns the transcript languages available for a video. A
+// language with both a manual and an auto-generated track is listed once,
+// preferring the manual name.
+func (c *Client) ListLanguages(ctx context.Context, videoID string) ([]TranscriptLanguage, error) {
+	html, err := c.fetchWatchPage(ctx, videoID)
+	if err != nil {
+		return nil, fmt.Errorf("fetching watch page: %w", err)
+	}
+
+	apiKey, err := extractAPIKey(html)
+	if err != nil {
+		return nil, fmt.Errorf("YouTube did not return expected page content — the video may be unavailable or requests are being blocked: %w", err)
+	}
+
+	n := len(c.identities)
+	start := int(c.rotation.Add(1)-1) % n
+	var lastErr error
+	for i := 0; i < n; i++ {
+		id := c.identities[(start+i)%n]
+		tracks, err := c.fetchCaptions(ctx, videoID, apiKey, id)
+		if err != nil {
+			var rateLimited *RateLimitError
+			if errors.As(err, &rateLimited) {
+				return nil, err
+			}
+			lastErr = err
+			continue
+		}
+		return toLanguages(tracks), nil
+	}
+	return nil, fmt.Errorf("all clients failed: %w", lastErr)
+}
+
+func toLanguages(tracks []captionTrack) []TranscriptLanguage {
+	order := make([]string, 0, len(tracks))
+	best := make(map[string]captionTrack, len(tracks))
+	for _, t := range tracks {
+		cur, ok := best[t.LanguageCode]
+		if !ok {
+			order = append(order, t.LanguageCode)
+			best[t.LanguageCode] = t
+			continue
+		}
+		if cur.Kind == "asr" && t.Kind != "asr" {
+			best[t.LanguageCode] = t
+		}
+	}
+
+	langs := make([]TranscriptLanguage, 0, len(order))
+	for _, code := range order {
+		langs = append(langs, TranscriptLanguage{Code: code, Name: trackName(best[code])})
+	}
+	return langs
+}
+
+func trackName(t captionTrack) string {
+	var b strings.Builder
+	for _, r := range t.Name.Runs {
+		b.WriteString(r.Text)
+	}
+	if name := b.String(); name != "" {
+		return name
+	}
+	return t.LanguageCode
+}
+
 func (c *Client) fetchWatchPage(ctx context.Context, videoID string) (string, error) {
 	u := fmt.Sprintf(watchURL, videoID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)

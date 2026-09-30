@@ -20,6 +20,7 @@ yt-transcript dQw4w9WgXcQ                  # plain text
 yt-transcript -fmt json dQw4w9WgXcQ        # JSON with timestamps
 yt-transcript -fmt srt dQw4w9WgXcQ         # SRT subtitles
 yt-transcript -lang fr dQw4w9WgXcQ         # French transcript
+yt-transcript -list dQw4w9WgXcQ            # list available languages
 ```
 
 ## Library
@@ -35,6 +36,12 @@ segments, _ := client.FetchTranscript(context.Background(), "dQw4w9WgXcQ", "en")
 for _, s := range segments {
     fmt.Println(s.Text)
 }
+
+// Discover what languages a video offers before fetching.
+langs, _ := client.ListLanguages(context.Background(), "dQw4w9WgXcQ")
+for _, l := range langs {
+    fmt.Println(l.Code, l.Name) // e.g. "en English"
+}
 ```
 
 ## Server
@@ -46,6 +53,7 @@ docker run -p 8080:8080 ghcr.io/shanehull/yt-transcript
 
 ```
 GET /{video_id}[?lang=en][&fmt=text|srt]  → transcript
+GET /{video_id}/languages                 → available languages
 ```
 
 ```bash
@@ -53,4 +61,5 @@ curl https://yt-transcript.net/dQw4w9WgXcQ
 curl https://yt-transcript.net/dQw4w9WgXcQ?fmt=text
 curl https://yt-transcript.net/dQw4w9WgXcQ?fmt=srt
 curl https://yt-transcript.net/dQw4w9WgXcQ?lang=fr
+curl https://yt-transcript.net/dQw4w9WgXcQ/languages
 ```

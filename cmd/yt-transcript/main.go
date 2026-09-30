@@ -15,10 +15,11 @@ import (
 var version = "dev"
 
 func main() {
-	var showVersion bool
+	var showVersion, list bool
 	var lang, format string
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.BoolVar(&showVersion, "v", false, "print version and exit (shorthand)")
+	flag.BoolVar(&list, "list", false, "list available transcript languages and exit")
 	flag.StringVar(&lang, "lang", "en", "language code for transcript")
 	flag.StringVar(&lang, "l", "en", "language code for transcript (shorthand)")
 	flag.StringVar(&format, "fmt", "text", "output format: text, json, srt")
@@ -41,8 +42,20 @@ func main() {
 	}
 
 	videoID := flag.Arg(0)
-
 	client := yt.NewClient()
+
+	if list {
+		langs, err := client.ListLanguages(context.Background(), videoID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		for _, l := range langs {
+			fmt.Printf("%s  %s\n", l.Code, l.Name)
+		}
+		return
+	}
+
 	segments, err := client.FetchTranscript(context.Background(), videoID, lang)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

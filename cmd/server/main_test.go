@@ -62,6 +62,18 @@ func TestNotFound(t *testing.T) {
 	}
 }
 
+func TestLanguagesInvalidVideoID(t *testing.T) {
+	t.Parallel()
+	h := newTestHandler(t)
+	req := httptest.NewRequest(http.MethodGet, "/short/languages", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("got status %d, want 400", rec.Code)
+	}
+}
+
 func TestInvalidVideoID(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler(t)

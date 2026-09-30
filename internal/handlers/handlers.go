@@ -63,7 +63,7 @@ var indexHTML = `<!DOCTYPE html>
 <div class="page">
   <div class="hero">
     <h1>yt-transcript</h1>
-    <p>Fetch the transcript of any YouTube video as JSON, plain text, or SRT. If you're piping transcripts into an LLM, indexing video content, or generating subtitles, this is the fastest way to get captions out of YouTube.</p>
+    <p>Fetch the transcript of any YouTube video as JSON, plain text, or SRT, and list the languages a video offers. If you're piping transcripts into an LLM, indexing video content, or generating subtitles, this is the fastest way to get captions out of YouTube.</p>
   </div>
 
   <div class="section">
@@ -71,6 +71,7 @@ var indexHTML = `<!DOCTYPE html>
     <div class="card">
       <div class="card-body">
         <div class="endpoint"><span class="method">GET</span> <span class="path">/{video_id}</span> <span class="dim">— transcript</span></div>
+        <div class="endpoint"><span class="method">GET</span> <span class="path">/{video_id}/languages</span> <span class="dim">— available languages</span></div>
       </div>
     </div>
   </div>
@@ -83,6 +84,7 @@ var indexHTML = `<!DOCTYPE html>
         <pre><span class="hl">curl</span> <span class="url">{{.BaseURL}}</span>/dQw4w9WgXcQ?<span class="hl">fmt=</span>text</pre>
         <pre><span class="hl">curl</span> <span class="url">{{.BaseURL}}</span>/dQw4w9WgXcQ?<span class="hl">fmt=</span>srt</pre>
         <pre><span class="hl">curl</span> <span class="url">{{.BaseURL}}</span>/dQw4w9WgXcQ?<span class="hl">lang=</span>fr</pre>
+        <pre><span class="hl">curl</span> <span class="url">{{.BaseURL}}</span>/dQw4w9WgXcQ/<span class="hl">languages</span></pre>
       </div>
     </div>
   </div>
@@ -117,6 +119,20 @@ We&apos;re no strangers to love
 <span class="hl">2</span>
 <span class="url">00:00:21,730</span> <span class="dim">--&gt;</span> <span class="url">00:00:24,550</span>
 You know the rules and so do I</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Available languages <span class="badge">/{video_id}/languages</span></div>
+    <div class="card">
+      <div class="card-body">
+        <pre><span class="dim">{</span>
+  <span class="hl">&quot;languages&quot;</span><span class="dim">:</span> <span class="dim">[</span>
+    <span class="dim">{</span> <span class="hl">&quot;code&quot;</span>: <span class="url">&quot;en&quot;</span><span class="dim">,</span> <span class="hl">&quot;name&quot;</span>: <span class="url">&quot;English&quot;</span> <span class="dim">}</span><span class="dim">,</span>
+    <span class="dim">{</span> <span class="hl">&quot;code&quot;</span>: <span class="url">&quot;de-DE&quot;</span><span class="dim">,</span> <span class="hl">&quot;name&quot;</span>: <span class="url">&quot;German (Germany)&quot;</span> <span class="dim">}</span>
+  <span class="dim">]</span>
+<span class="dim">}</span></pre>
       </div>
     </div>
   </div>
@@ -202,6 +218,27 @@ func Transcript(client *yt.Client, transcriptCache *cache.Cache) http.Handler {
 		}
 
 		writeSegments(w, r.URL.Query().Get("fmt"), segments)
+	})
+}
+
+// Languages returns the transcript languages available for a video.
+func Languages(client *yt.Client) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		videoID := r.PathValue("video_id")
+		if videoID == "" || !videoIDRe.MatchString(videoID) {
+			writeError(w, http.StatusBadRequest, "invalid video_id")
+			return
+		}
+
+		langs, err := client.ListLanguages(r.Context(), videoID)
+		if err != nil {
+			slog.Error("listing languages", "video_id", videoID, "error", err)
+			writeError(w, errorStatus(err), err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"languages": langs})
 	})
 }
 
