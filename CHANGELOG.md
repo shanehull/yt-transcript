@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.5](https://github.com/shanehull/yt-transcript/compare/v0.0.4...v0.0.5) (2026-09-30)
+
+
+### Features
+
+* add ListLanguages and languages endpoint ([#12](https://github.com/shanehull/yt-transcript/issues/12)) ([4f232be](https://github.com/shanehull/yt-transcript/commit/4f232bee9c8f3da76874e3acf8cdf5f9b292cd49))
+* rotate innertube client identities with fallback ([#11](https://github.com/shanehull/yt-transcript/issues/11)) ([1a62678](https://github.com/shanehull/yt-transcript/commit/1a62678db37d13b90ec22ac8dcbb6e4cb4280976))
+
+
+### Bug Fixes
+
+* back off on YouTube 429s with a circuit breaker ([#9](https://github.com/shanehull/yt-transcript/issues/9)) ([509d452](https://github.com/shanehull/yt-transcript/commit/509d452c457b4fbf7e12db51e8ba37b6aee6aca5))
+
 ## [0.0.4](https://github.com/shanehull/yt-transcript/compare/v0.0.3...v0.0.4) (2026-06-20)
 
 
