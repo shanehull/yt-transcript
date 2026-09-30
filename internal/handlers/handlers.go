@@ -4,6 +4,7 @@ package handlers
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -185,6 +186,10 @@ func Transcript(client *yt.Client, transcriptCache *cache.Cache) http.Handler {
 			segments, err = client.FetchTranscript(r.Context(), videoID, lang)
 			if err != nil {
 				slog.Error("fetching transcript", "video_id", videoID, "lang", lang, "error", err)
+				var rle *yt.RateLimitError
+				if errors.As(err, &rle) && rle.RetryAfter > 0 {
+					w.Header().Set("Retry-After", fmt.Sprintf("%d", int(rle.RetryAfter.Seconds())+1))
+				}
 				writeError(w, errorStatus(err), err.Error())
 				return
 			}

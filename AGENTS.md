@@ -23,7 +23,7 @@ GET /{video_id}[?lang=en][&fmt=text|json|srt]  → transcript
 
 Env: `SERVER_HOST` (127.0.0.1), `PORT` (8080), `ALLOWED_ORIGIN` (\*), `BASE_URL` (auto).
 
-Error status codes: 400 (bad request), 404 (no transcript), 502 (upstream failure), 503 (YouTube rate limiting).
+Error status codes: 400 (bad request), 404 (no transcript), 502 (upstream failure), 503 (YouTube rate limiting). 503 responses carry `Retry-After` when the wait is known.
 
 ## Gotchas
 
@@ -31,6 +31,7 @@ Error status codes: 400 (bad request), 404 (no transcript), 502 (upstream failur
 - **HTML entities** in transcript text (`&#39;`, `&amp;`, etc.) are unescaped.
 - **No API key needed** — extracted from the watch page at runtime.
 - **429 / bot detection** detected in all three HTTP calls; returned as clear errors.
+- **Rate-limit backoff**: a circuit breaker trips after repeated 429s and backs off (1m doubling to a 1h cap), short-circuiting upstream calls so a flagged egress is not hammered. Seeing 429s everywhere usually means the egress IP is banned on `timedtext`, not a code fault.
 
 ## Tests
 
