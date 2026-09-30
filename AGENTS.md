@@ -7,12 +7,12 @@ Tool versions pinned in `mise.toml`.
 ## Architecture
 
 ```
-transcript.go              Client, NewClient, FetchTranscript, WithHTTPClient
+transcript.go              Client, NewClient, FetchTranscript, ListLanguages, WithHTTPClient
 clients.go                 Innertube client identities (rotating)
 breaker.go                 Circuit breaker for upstream 429s
 internal/cache/cache.go    In-memory TTL cache for server use
-cmd/yt-transcript/main.go  CLI (text, json, srt output)
-cmd/server/main.go         HTTP server (/{video_id}, /healthz)
+cmd/yt-transcript/main.go  CLI (text, json, srt, list languages)
+cmd/server/main.go         HTTP server (/{video_id}, /{video_id}/languages, /healthz)
 ```
 
 Fetch flow: watch page → extract API key from HTML → innertube player API (rotating app clients) → caption track baseUrl → parse XML → segments.
@@ -21,6 +21,7 @@ Fetch flow: watch page → extract API key from HTML → innertube player API (r
 
 ```
 GET /{video_id}[?lang=en][&fmt=text|json|srt]  → transcript
+GET /{video_id}/languages                      → available languages
 ```
 
 Env: `SERVER_HOST` (127.0.0.1), `PORT` (8080), `ALLOWED_ORIGIN` (\*), `BASE_URL` (auto).
@@ -34,6 +35,7 @@ Error status codes: 400 (bad request), 404 (no transcript), 502 (upstream failur
 - **No API key needed** — extracted from the watch page at runtime.
 - **429 / bot detection** detected in all three HTTP calls; returned as clear errors.
 - **Client rotation**: `clients.go` holds verified app identities (Android, iOS, Android VR, visionOS), tried in turn so a stale client is not fatal. The web/`WEB` client is deliberately absent — it is poToken-gated and returns `UNPLAYABLE`. `TestLive_FetchEachClient` flags identity rot.
+- **Language listing**: `ListLanguages` folds an auto-generated (`asr`) track into the manual track for the same code, so each language is listed once with its manual name.
 - **Rate-limit backoff**: a circuit breaker trips after repeated 429s and backs off (1m doubling to a 1h cap), short-circuiting upstream calls so a flagged egress is not hammered. Seeing 429s everywhere usually means the egress IP is banned on `timedtext`, not a code fault.
 
 ## Tests

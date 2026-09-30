@@ -42,4 +42,12 @@ func addRoutes(
 			allowedOrigin,
 		),
 	)
+
+	mux.Handle(
+		"GET /{video_id}/languages",
+		middleware.CORS(
+			handlers.Languages(client),
+			allowedOrigin,
+		),
+	)
 }
